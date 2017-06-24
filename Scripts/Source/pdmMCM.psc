@@ -27,6 +27,7 @@ int[] currentStrips
 bool animateStrip
 float stripTime
 int pickedDance = 0
+int pickedPose = 0
 spdfDance currentStrip
 
 ; -))
@@ -333,11 +334,18 @@ endFunction
 
 Function generatePoses()
 	SetTitleText("Edit Performance by Pose")
-	; Not sure we need it
+	
 	AddSliderOptionST("PerfTimeSL", "Time for the Performance", performanceTime)
+	if pickedPose>-1 && pickedPose<poseNames.length
+		AddMenuOptionST("PickPoseMN", "Start Pose", poseNames[pickedPose])
+	else
+		AddMenuOptionST("PickPoseMN", "Start Pose", "???")
+	endIf
 endFunction
 
 ; -))
+
+
 
 ; ((- Generate Tags
 
@@ -626,6 +634,38 @@ state PickDanceMN
 	endEvent
 endState
 
+state PickPoseMN
+	event OnMenuOpenST()
+		SetMenuDialogStartIndex(pickedPose)
+		SetMenuDialogDefaultIndex(0)
+		SetMenuDialogOptions(poseNames)
+	endEvent
+
+	event OnMenuAcceptST(int index)
+		if index>-1 && index<poseNames.length
+			bool update = (pickedPose != index)
+			pickedPose = index
+			SetMenuOptionValueST(poseNames[pickedPose])
+			if update
+				ForcePageReset()
+			endIf
+		endIf
+	endEvent
+
+	event OnDefaultST()
+		bool update = (pickedPose != 0)
+		pickedPose = 0
+		SetMenuOptionValueST(poseNames[0])
+		if update
+			ForcePageReset()
+		endIf
+	endEvent
+
+	event OnHighlightST()
+		SetInfoText("Select the pose from the available ones. The performance will start with this pose and then continue with dances using matching the poses.")
+	endEvent
+endState
+
 state SetAllToMN
 	event OnMenuOpenST()
 		SetMenuDialogStartIndex(0)
@@ -779,7 +819,14 @@ function playDance(Actor a)
 		p.setDancesObject(currentDances)
 		p.start()
 	elseIf currPerfMode==1
-		; TODO pose and time
+		if pickedPose<0
+			Debug.Messagebox("No pose has been selected\nOpen the MCM of PoleDance Maker and set the starting pose for the performance.")
+			return
+		endIf
+		spdfPerformance p = spdF.newPerformance(a, placedPole, performanceTime)
+		p.setStartPose(poseNames[pickedPose])
+		p.start()
+		
 	elseIf currPerfMode==2
 		; TODO tags
 	else
