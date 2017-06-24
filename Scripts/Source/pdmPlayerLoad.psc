@@ -24,15 +24,6 @@ Function init()
 		endIf
 		return
 	endIf
-	Actor p = self.getActorRef()
-	if !p.hasSpell(pdmDanceSelf)
-		p.addSpell(pdmDanceSelf)
-		p.equipSpell(pdmDanceSelf, 1)
-	endIf
-	if !p.hasSpell(pdmDanceTarget)
-		p.addSpell(pdmDanceTarget)
-		p.equipSpell(pdmDanceTarget, 0)
-	endIf
 endFunction
 
 Spell Property pdmDanceSelf Auto

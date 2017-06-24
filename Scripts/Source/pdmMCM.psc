@@ -40,6 +40,7 @@ Spell Property pdmDanceSelf Auto
 Spell Property pdmDanceTarget Auto
 Spell Property pdmPlacePole Auto
 float Property performanceTime Auto
+ObjectReference Property placedPole Auto
 
 ; -))
 ; -))
@@ -82,7 +83,7 @@ event OnConfigOpen()
 	posesIdx = new int[16]
 	int i=0
 	numPoses=0
-	while i<reg._getPosesNum(true)
+	while i<reg.getPosesNum(0)
 		spdfPose p = reg._getPoseByIndex(i)
 		if p && p.inUse
 			poses[numPoses] = p
@@ -94,7 +95,7 @@ event OnConfigOpen()
 	endWhile
 	i=0
 	numDances=0
-	while i<reg._getDancesNum(true)
+	while i<reg.getDancesNum(0)
 		spdfDance d = reg._getDanceByIndex(i)
 		if d && d.inUse
 			dances[numDances] = d
@@ -130,6 +131,7 @@ endEvent
 
 
 ; ((- Generate Config
+
 Function generateConfig()
 	thePage = "Config"
 	SetCursorFillMode(TOP_TO_BOTTOM)
@@ -349,6 +351,7 @@ endEvent
 
 Event OnOptionSelect(int option)
 	if thePage=="Config"
+debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 		Actor p = Game.getPlayer()
 		if option==opts[0]
 			selfSpell = !selfSpell
@@ -362,6 +365,7 @@ Event OnOptionSelect(int option)
 					p.removeSpell(pdmDanceSelf)
 				endIf
 			endIf
+			SetToggleOptionValue(option, selfSpell)
 		elseIf option==opts[1]
 			targetSpell = !targetSpell
 			if targetSpell
@@ -374,6 +378,7 @@ Event OnOptionSelect(int option)
 					p.removeSpell(pdmDanceTarget)
 				endIf
 			endIf
+			SetToggleOptionValue(option, targetSpell)
 		elseIf option==opts[2]
 			placePoleSpell = !placePoleSpell
 			if placePoleSpell
@@ -386,6 +391,7 @@ Event OnOptionSelect(int option)
 					p.removeSpell(pdmPlacePole)
 				endIf
 			endIf
+			SetToggleOptionValue(option, placePoleSpell)
 		endIf
 	
 	elseIf thePage=="Dances"

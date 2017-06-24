@@ -1,5 +1,7 @@
 Scriptname pdmDanceTargetScript extends ActiveMagicEffect
 
+pdmMCM Property pdm Auto
+
 Event OnEffectStartTest(Actor t, Actor akCaster)
 	spdfPoleDances spdF = spdfPoleDances.getInstance()
 
