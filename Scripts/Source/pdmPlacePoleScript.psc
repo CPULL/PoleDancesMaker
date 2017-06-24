@@ -2,6 +2,8 @@ Scriptname pdmPlacePoleScript extends ActiveMagicEffect
 
 pdmMCM Property pdm Auto
 bool stillActive = false
+float prevX = -1.0
+float prevY = -1.0
 
 Event OnEffectStart(Actor akTarget, Actor akCaster)
 	spdfPoleDances spdF = spdfPoleDances.getInstance()
@@ -12,10 +14,13 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 		return
 	endIf
 	
+	prevX = -1.0
+	prevY = -1.0
 	pdm.placedPole = spdF.placePole(None, 175.0, 0.0, -1)
 	stillActive = true
 	RegisterForSingleUpdate(0.35)
 endEvent
+
 
 
 Event OnUpdate()
@@ -25,9 +30,15 @@ Event OnUpdate()
 
 	Actor p = Game.getPlayer()
 	float zAngle = p.getAngleZ()
-	pdm.placedPole.SetPosition(p.X + Math.sin(zAngle) * 175.0, p.Y + Math.cos(zAngle) * 175.0, p.Z)
-	if pdm.placedPole.getAngleZ()!=zAngle
-		pdm.placedPole.setAngle(0.0, 0.0, zAngle)
+	float newX = p.X + Math.sin(zAngle) * 175.0
+	float newY = p.Y + Math.cos(zAngle) * 175.0
+	if newX!=prevX || newY!=prevY
+		pdm.placedPole.SetPosition(newX, newY, p.Z)
+		if pdm.placedPole.getAngleZ()!=zAngle
+			pdm.placedPole.setAngle(0.0, 0.0, zAngle)
+		endIf
+		prevX=newX
+		prevY=newY
 	endIf
 	if stillActive
 		RegisterForSingleUpdate(0.35)

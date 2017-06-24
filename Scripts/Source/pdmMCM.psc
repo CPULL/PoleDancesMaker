@@ -117,7 +117,6 @@ event OnPageReset(string page)
 	endIf
 	if page=="Config"
 		generateConfig()
-
 	elseIf page=="Dances"
 		generateDances()
 	elseIf page=="Poses"
@@ -133,6 +132,8 @@ endEvent
 ; ((- Generate Config
 
 Function generateConfig()
+	cleanOptions()
+
 	thePage = "Config"
 	SetCursorFillMode(TOP_TO_BOTTOM)
 	AddMenuOptionST("DanceModeMN", "Performance Mode", perfModes[currPerfMode])
@@ -141,6 +142,7 @@ Function generateConfig()
 	opts[0] = AddToggleOption("Enable self spell", selfSpell)
 	opts[1] = AddToggleOption("Enable target spell", targetSpell)
 	opts[2] = AddToggleOption("Enable place pole spell", placePoleSpell)
+	
 endFunction
 
 ; -))
@@ -150,6 +152,7 @@ endFunction
 ; ((- Generate Dances
 
 Function generateDances()
+	cleanOptions()
 	if thePage==""
 		thePage="Dances"
 	elseIf thePage=="EditDance"
@@ -161,6 +164,8 @@ Function generateDances()
 	elseIf thePage=="PreviewDance"
 		generatePreviewDance()
 		return
+	else
+		thePage="Dances"
 	endIf
 
 	SetCursorFillMode(TOP_TO_BOTTOM)
@@ -215,7 +220,7 @@ Function generateDances()
 		opts[6] = AddTextOption("", "Move Down", OPTION_FLAG_DISABLED)
 	endIf
 	AddEmptyOption()
-	if currentSelectedDance!=-1 && !currentDances[currentSelectedDance].isStrip
+	if currentSelectedDance!=-1 && currentDances[currentSelectedDance] && !currentDances[currentSelectedDance].isStrip
 		opts[7] = AddTextOption("", "Preview")
 	else
 		opts[7] = AddTextOption("", "Preview", OPTION_FLAG_DISABLED)
@@ -338,6 +343,7 @@ endFunction
 
 Function generateTags()
 	SetTitleText("Edit Performance by Tags")
+	AddTextOption("This mode is not yet available", "", OPTION_FLAG_DISABLED)
 endFunction
 
 ; -))
@@ -351,7 +357,7 @@ endEvent
 
 Event OnOptionSelect(int option)
 	if thePage=="Config"
-debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
+debug.trace("CONFIG option=" + option + " optsNum=" + opts.find(option))
 		Actor p = Game.getPlayer()
 		if option==opts[0]
 			selfSpell = !selfSpell
@@ -395,6 +401,7 @@ debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 		endIf
 	
 	elseIf thePage=="Dances"
+debug.trace("DANCES option=" + option + " optsNum=" + opts.find(option))
 		if option==opts[0] || option==opts[1] ; Add Dance
 			if numCurrentDances<currentDances.length
 				currentDances[numCurrentDances] = reg._getDanceByIndex(dancesIdx[0])
@@ -408,9 +415,16 @@ debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 		elseIf option==opts[2] ; Add Strip
 			if numCurrentDances<currentDances.length
 				; Open a Strip creation page, when closing set the strip as current dance
+				int i = currentStrips.length
+				while i
+					i-=1
+					currentStrips[i]=0
+				endWhile
+				stripTime=3.0
+				animateStrip=false
 				currentStrip = reg.allocateStrip()
 				if !currentStrip
-					Debug.MessageBox("no more Strip Slots available")
+					Debug.MessageBox("No more Strip Slots available")
 				else
 					thePage="EditStrip"
 				endIf
@@ -423,6 +437,10 @@ debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 			if currentDances[currentSelectedDance] 
 				if currentDances[currentSelectedDance].isStrip
 					thePage="EditStrip"
+					; get back the old strip values
+					currentDances[currentSelectedDance].getStrips(currentStrips)
+					animateStrip = currentDances[currentSelectedDance]._AnimatedStrips()
+					stripTime = currentDances[currentSelectedDance].duration
 				else
 					thePage="EditDance"
 				endIf
@@ -499,15 +517,17 @@ debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 		endIf
 
 	elseIf thePage=="EditDance"
+debug.trace("EDITDANCE option=" + option + " optsNum=" + opts.find(option))
 		if option==opts[0]
-			if currentDances[pickedDance].duration==customTime[pickedDance]
-				customTime[pickedDance]=0.0
+			if currentDances[currentSelectedDance].duration==customTime[currentSelectedDance]
+				customTime[currentSelectedDance]=0.0
 			endIf
 			thePage=""
 			ForcePageReset()
 		endIf
 		
 	elseIf thePage=="EditStrip"
+debug.trace("EDITSTRIP option=" + option + " optsNum=" + opts.find(option))
 		if option==opts[40] ; Save
 			currentStrip.setStripValues(currentStrips, animateStrip, stripTime)
 			thePage = ""
@@ -520,6 +540,28 @@ debug.trace("option=" + option + " opts[0]=" + opts[0] + "  opts[2]=" + opts[2])
 	
 	endIf
 endEvent
+
+Event OnOptionMenuOpen(int option)
+	if thePage=="EditStrip"
+		int pos = opts.find(option)
+		if pos<32
+			SetMenuDialogStartIndex(currentStrips[pos])
+			SetMenuDialogDefaultIndex(0)
+			SetMenuDialogOptions(stripMn)
+		endIf
+	endIf
+endEvent
+
+Event OnOptionMenuAccept(int option, int value)
+	if thePage=="EditStrip"
+		int pos = opts.find(option)
+		if pos<32
+			currentStrips[pos] = value
+			SetMenuOptionValue(option, stripMn[currentStrips[pos]])
+		endIf
+	endIf
+endEvent
+
 
 ; -))
 
@@ -633,12 +675,12 @@ state DanceTimeSL
 			a_value = currentDances[currentSelectedDance].duration
 		endIf
 		customTime[currentSelectedDance]=a_value
-		SetSliderOptionValueST(a_value)
+		SetSliderOptionValueST(a_value, "{2} secs")
 	endEvent
 
 	event OnDefaultST()
 		customTime[currentSelectedDance]=currentDances[currentSelectedDance].duration
-		SetSliderOptionValueST(currentDances[currentSelectedDance].duration)
+		SetSliderOptionValueST(currentDances[currentSelectedDance].duration, "{2} secs")
 	endEvent
 
 	event OnHighlightST()
@@ -656,12 +698,12 @@ state PerfTimeSL
 
 	event OnSliderAcceptST(float a_value)
 		performanceTime=a_value
-		SetSliderOptionValueST(performanceTime)
+		SetSliderOptionValueST(performanceTime, "{2} secs")
 	endEvent
 
 	event OnDefaultST()
 		customTime[currentSelectedDance]=30.0
-		SetSliderOptionValueST(30.0)
+		SetSliderOptionValueST(30.0, "{2} secs")
 	endEvent
 
 	event OnHighlightST()
@@ -672,19 +714,19 @@ endState
 state StripTimeST
 	Event OnSliderOpenST()
 		SetSliderDialogStartValue(stripTime)
-		SetSliderDialogDefaultValue(5.0)
+		SetSliderDialogDefaultValue(3.0)
 		SetSliderDialogRange(0.0, 12.0)
 		SetSliderDialogInterval(0.1)
 	endEvent
 
 	event OnSliderAcceptST(float a_value)
 		stripTime=a_value
-		SetSliderOptionValueST(stripTime)
+		SetSliderOptionValueST(stripTime, "{2} secs")
 	endEvent
 
 	event OnDefaultST()
-		stripTime=5.0
-		SetSliderOptionValueST(5.0)
+		stripTime=3.0
+		SetSliderOptionValueST(3.0, "{2} secs")
 	endEvent
 
 	event OnHighlightST()
@@ -721,3 +763,28 @@ string function trimFloat(float f)
 endFunction
 
 ; -))
+
+
+
+
+function playDance(Actor a)
+	; Find how we have to play, create the parformance, assign the actor, find if we have a pole, and play it
+	if currPerfMode==0
+		if numCurrentDances==0
+			Debug.Messagebox("No dances are defined\nOpen the MCM of PoleDance Maker and define the sequence of dances for the performance.")
+			return
+		endIf
+	
+		spdfPerformance p = spdF.newPerformance(a, placedPole, performanceTime)
+		p.setDancesObject(currentDances)
+		p.start()
+	elseIf currPerfMode==1
+		; TODO pose and time
+	elseIf currPerfMode==2
+		; TODO tags
+	else
+		spdF.quickStart(a, placedPole, performanceTime, reg.findRandomStartPose())
+	endIf
+endFunction
+
+
