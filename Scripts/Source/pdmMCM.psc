@@ -9,18 +9,24 @@ spdfPoleDances spdF
 spdfRegistry reg
 int numPoses=0
 int numDances=0
+int numStrips=0
 int[] posesIdx
 int[] dancesIdx
+int[] stripsIdx
 spdfPose[] poses
 string[] poseNames
 spdfDance[] dances
 string[] danceNames
+spdfStrip[] strips
+string[] stripNames
 string[] perfModes
 int currPerfMode
 string thePage = ""
 int currentSelectedDance = -1
+int currentSelectedPose = -1
+int currentSelectedStrip = -1
 int numCurrentDances = 0
-spdfDance[] currentDances
+spdfBase[] currentDances
 float[] customTime
 string[] stripMn
 int[] currentStrips
@@ -28,7 +34,8 @@ bool animateStrip
 float stripTime
 int pickedDance = 0
 int pickedPose = 0
-spdfDance currentStrip
+int pickedStrip = 0
+spdfStrip currentStrip
 
 ; -))
 
@@ -55,9 +62,9 @@ event OnConfigInit()
 	perfModes[1] = "Start Pose"
 	perfModes[2] = "Tags"
 	numCurrentDances = 0
-	currentDances = new spdfDance[8]
+	currentDances = new spdfBase[16]
 	currentSelectedDance=-1
-	customTime = new float[8]
+	customTime = new float[16]
 	if performanceTime<1.0
 		performanceTime=30.0
 	endIf
@@ -68,6 +75,19 @@ event OnConfigInit()
 	currentStrips = new int[32]
 	animateStrip = false
 	stripTime = 3.0
+	
+	RegisterForKey(2) ; d+
+	RegisterForKey(3) ; d-
+	RegisterForKey(4) ; z+
+	RegisterForKey(5) ; z-
+	RegisterForKey(6) ; t+
+	RegisterForKey(7) ; t-
+	RegisterForKey(8) ; i+
+	RegisterForKey(9) ; i-
+	RegisterForKey(10) ; test
+	RegisterForKey(11) ; test
+	spdF = spdfPoleDances.getInstance()
+	reg = spdF.registry
 endEvent
 
 event OnConfigOpen()
@@ -79,6 +99,9 @@ event OnConfigOpen()
 	dances = new spdfDance[16]
 	danceNames = new string[16]
 	dancesIdx = new int[16]
+	strips = new spdfStrip[16]
+	stripNames = new string[16]
+	stripsIdx = new int[16]
 	poses = new spdfPose[16]
 	poseNames = new string[16]
 	posesIdx = new int[16]
@@ -106,9 +129,20 @@ event OnConfigOpen()
 		endIf
 		i+=1
 	endWhile
+	i=0
+	numStrips=0
+	while i<reg.getStripsNum(0)
+		spdfStrip s = reg._getStripByIndex(i)
+		if s && s.inUse && !s.isTemporary
+			strips[numStrips] = s
+			stripNames[numStrips] = s.name
+			stripsIdx[numStrips] = i
+			numStrips+=1
+		endIf
+		i+=1
+	endWhile
 
 	; FUTURE tags
-	; FUTURE body parts
 endEvent
 
 event OnPageReset(string page)
@@ -159,8 +193,14 @@ Function generateDances()
 	elseIf thePage=="EditDance"
 		generateEditDance()
 		return
+	elseIf thePage=="PickingPose"
+		generatePickingPose()
+		return
 	elseIf thePage=="EditStrip"
 		generateEditStrip()
+		return
+	elseIf thePage=="PickingStrip"
+		generatePickingStrip()
 		return
 	elseIf thePage=="PreviewDance"
 		generatePreviewDance()
@@ -197,34 +237,38 @@ Function generateDances()
 	SetCursorPosition(1)
 	if numCurrentDances<currentDances.length
 		opts[1] = AddTextOption("", "Add dance")
-		opts[2] = AddTextOption("", "Add strip")
+		opts[2] = AddTextOption("", "Add pose")
+		opts[3] = AddTextOption("", "Add strip")
+		opts[4] = AddTextOption("", "Add custom strip")
 	else
 		opts[1] = AddTextOption("", "Add dance", OPTION_FLAG_DISABLED)
-		opts[2] = AddTextOption("", "Add strip", OPTION_FLAG_DISABLED)
+		opts[2] = AddTextOption("", "Add pose", OPTION_FLAG_DISABLED)
+		opts[3] = AddTextOption("", "Add strip", OPTION_FLAG_DISABLED)
+		opts[4] = AddTextOption("", "Add custom strip", OPTION_FLAG_DISABLED)
 	endIf
 	if currentSelectedDance!=-1
-		opts[3] = AddTextOption("", "Change Selected")
-		opts[4] = AddTextOption("", "Remove Selected")
+		opts[5] = AddTextOption("", "Change Selected")
+		opts[6] = AddTextOption("", "Remove Selected")
 	else
-		opts[3] = AddTextOption("", "Change Selected", OPTION_FLAG_DISABLED)
-		opts[4] = AddTextOption("", "Remove Selected", OPTION_FLAG_DISABLED)
+		opts[5] = AddTextOption("", "Change Selected", OPTION_FLAG_DISABLED)
+		opts[6] = AddTextOption("", "Remove Selected", OPTION_FLAG_DISABLED)
 	endIf
 	AddEmptyOption()
 	if currentSelectedDance>0
-		opts[5] = AddTextOption("", "Move Up")
+		opts[7] = AddTextOption("", "Move Up")
 	else
-		opts[5] = AddTextOption("", "Move Up", OPTION_FLAG_DISABLED)
+		opts[7] = AddTextOption("", "Move Up", OPTION_FLAG_DISABLED)
 	endIf
 	if currentSelectedDance!=-1 && currentSelectedDance<numCurrentDances - 1
-		opts[6] = AddTextOption("", "Move Down")
+		opts[8] = AddTextOption("", "Move Down")
 	else
-		opts[6] = AddTextOption("", "Move Down", OPTION_FLAG_DISABLED)
+		opts[8] = AddTextOption("", "Move Down", OPTION_FLAG_DISABLED)
 	endIf
 	AddEmptyOption()
 	if currentSelectedDance!=-1 && currentDances[currentSelectedDance] && !currentDances[currentSelectedDance].isStrip
-		opts[7] = AddTextOption("", "Preview")
+		opts[9] = AddTextOption("", "Preview")
 	else
-		opts[7] = AddTextOption("", "Preview", OPTION_FLAG_DISABLED)
+		opts[9] = AddTextOption("", "Preview", OPTION_FLAG_DISABLED)
 	endIf
 	
 endFunction
@@ -243,15 +287,15 @@ Function generateEditDance()
 		AddTextOption("Start Pose", "not defined", OPTION_FLAG_DISABLED)
 	endIf
 	if currentSelectedDance>0
-		if currentDances[currentSelectedDance - 1].endPose
-			AddTextOption("Expected Start Pose", currentDances[currentSelectedDance - 1].endPose.name, OPTION_FLAG_DISABLED)
+		if currentDances[currentSelectedDance - 1].isDance && (currentDances[currentSelectedDance - 1] as spdfDance).endPose
+			AddTextOption("Expected Start Pose", (currentDances[currentSelectedDance - 1] as spdfDance).endPose.name, OPTION_FLAG_DISABLED)
 		else
 			AddEmptyOption()
 		endIf
 	else
 		AddEmptyOption()
 	endIf
-	if dances[pickedDance].startPose && currentSelectedDance>0 && currentDances[currentSelectedDance - 1].endPose && dances[pickedDance].startPose!=currentDances[currentSelectedDance - 1].endPose
+	if dances[pickedDance].startPose && currentSelectedDance>0 && currentDances[currentSelectedDance - 1].isDance && (currentDances[currentSelectedDance - 1] as spdfDance).endPose && dances[pickedDance].startPose!=(currentDances[currentSelectedDance - 1] as spdfDance).endPose
 		AddTextOption("WARNING: poses do not match!", "", OPTION_FLAG_DISABLED)
 	else
 		AddEmptyOption()
@@ -264,15 +308,15 @@ Function generateEditDance()
 		AddTextOption("End Pose", "not defined", OPTION_FLAG_DISABLED)
 	endIf
 	if currentSelectedDance<numCurrentDances - 1
-		if currentDances[currentSelectedDance + 1].startPose
-			AddTextOption("Expected End Pose", currentDances[currentSelectedDance + 1].startPose.name, OPTION_FLAG_DISABLED)
+		if currentDances[currentSelectedDance + 1].isDance && (currentDances[currentSelectedDance + 1] as spdfDance).startPose
+			AddTextOption("Expected End Pose", (currentDances[currentSelectedDance + 1] as spdfDance).startPose.name, OPTION_FLAG_DISABLED)
 		else
 			AddEmptyOption()
 		endIf
 	else
 		AddEmptyOption()
 	endIf
-	if dances[pickedDance].endPose && currentSelectedDance<numCurrentDances - 1 && currentDances[currentSelectedDance + 1].startPose && dances[pickedDance].endPose!=currentDances[currentSelectedDance + 1].startPose
+	if dances[pickedDance].endPose && currentSelectedDance<numCurrentDances - 1 && currentDances[currentSelectedDance + 1].isDance && (currentDances[currentSelectedDance + 1] as spdfDance).startPose && dances[pickedDance].endPose!=(currentDances[currentSelectedDance + 1] as spdfDance).startPose
 		AddTextOption("WARNING: poses do not match!", "", OPTION_FLAG_DISABLED)
 	else
 		AddEmptyOption()
@@ -293,8 +337,8 @@ endFunction
 
 function generatePreviewDance()
 	SetTitleText("Preview")
-	spdfDance d = currentDances[currentSelectedDance]
-	if d && !d.isStrip
+	spdfBase d = currentDances[currentSelectedDance]
+	if d && d.isDance
 		LoadCustomContent("Skyrim Pole Dances/DancesPreview/" + d.previewFile, 0.0, 0.0)
 		Utility.waitMenuMode(3.0)
 	endIf
@@ -327,6 +371,57 @@ Function generateEditStrip()
 	
 endFunction
 
+Function generatePickingStrip()
+	SetTitleText("Select the Strip")
+	thePage="PickingStrip"
+
+	SetCursorFillMode(LEFT_TO_RIGHT)
+	AddMenuOptionST("PickStripMN", "Strip", stripNames[pickedStrip])
+	opts[0] = AddTextOption("", "Save")
+	SetCursorPosition(2)
+	AddHeaderOption("")
+	AddHeaderOption("")
+	
+	; Pich the strip and show its preview
+	spdfStrip s = strips[pickedStrip]
+	
+	AddToggleOption("Animated strips", s.animatedStrip, OPTION_FLAG_DISABLED)
+	AddToggleOption("OFA Animation", s.isOFA, OPTION_FLAG_DISABLED)
+	AddTextOption("Duration",  trimFloat(s.duration), OPTION_FLAG_DISABLED)
+	AddTextOption("Pre Duration", trimFloat(s.preStripDuration), OPTION_FLAG_DISABLED)
+	AddHeaderOption("")
+	AddHeaderOption("")
+	; List of all the slots (dress/strip do not list the "ignore")
+	int i=0
+	int[] parts = s.stripSlots()
+	while i<32
+		if parts[i]==1
+			AddTextOption(reg.bodyParts[i], "Strip", OPTION_FLAG_DISABLED)
+		elseIf parts[i]==-1
+			AddTextOption(reg.bodyParts[i], "Dress", OPTION_FLAG_DISABLED)
+		endIf
+		i+=1
+	endWhile
+	
+endFunction
+
+Function generatePickingPose()
+	SetTitleText("Select the Pose")
+	thePage="PickingPose"
+
+	SetCursorFillMode(LEFT_TO_RIGHT)
+	AddMenuOptionST("PickPoseMN", "Pose", poseNames[pickedPose])
+	opts[0] = AddTextOption("", "Save")
+	SetCursorPosition(2)
+	AddHeaderOption("")
+	AddHeaderOption("")
+	
+	; Pich the strip and show its preview
+	spdfPose p = poses[pickedPose]
+	
+	AddTextOption("Duration",  trimFloat(p.duration), OPTION_FLAG_DISABLED)
+endFunction
+
 
 ; -))
 
@@ -335,11 +430,14 @@ endFunction
 Function generatePoses()
 	SetTitleText("Edit Performance by Pose")
 	
+	AddTextOption("This is not yet done...", "", OPTION_FLAG_DISABLED)
+	return
+	
 	AddSliderOptionST("PerfTimeSL", "Time for the Performance", performanceTime)
 	if pickedPose>-1 && pickedPose<poseNames.length
-		AddMenuOptionST("PickPoseMN", "Start Pose", poseNames[pickedPose])
+		AddMenuOptionST("PickPoseMNold", "Start Pose", poseNames[pickedPose])
 	else
-		AddMenuOptionST("PickPoseMN", "Start Pose", "???")
+		AddMenuOptionST("PickPoseMNold", "Start Pose", "???")
 	endIf
 endFunction
 
@@ -365,7 +463,6 @@ endEvent
 
 Event OnOptionSelect(int option)
 	if thePage=="Config"
-debug.trace("CONFIG option=" + option + " optsNum=" + opts.find(option))
 		Actor p = Game.getPlayer()
 		if option==opts[0]
 			selfSpell = !selfSpell
@@ -409,7 +506,6 @@ debug.trace("CONFIG option=" + option + " optsNum=" + opts.find(option))
 		endIf
 	
 	elseIf thePage=="Dances"
-debug.trace("DANCES option=" + option + " optsNum=" + opts.find(option))
 		if option==opts[0] || option==opts[1] ; Add Dance
 			if numCurrentDances<currentDances.length
 				currentDances[numCurrentDances] = reg._getDanceByIndex(dancesIdx[0])
@@ -420,7 +516,27 @@ debug.trace("DANCES option=" + option + " optsNum=" + opts.find(option))
 				ForcePageReset()
 			endIf
 		
-		elseIf option==opts[2] ; Add Strip
+		elseIf option==opts[2] ; Add Pose
+			if numCurrentDances<currentDances.length
+				currentDances[numCurrentDances] = reg._getPoseByIndex(posesIdx[0])
+				currentSelectedPose = numCurrentDances
+				pickedPose = 0
+				numCurrentDances+=1
+				thePage="PickingPose"
+				ForcePageReset()
+			endIf
+		
+		elseIf option==opts[3] ; Add Strip
+			if numCurrentDances<currentDances.length
+				currentDances[numCurrentDances] = reg._getStripByIndex(stripsIdx[0])
+				currentSelectedStrip = numCurrentDances
+				pickedStrip = 0
+				numCurrentDances+=1
+				thePage="PickingStrip"
+				ForcePageReset()
+			endIf
+		
+		elseIf option==opts[4] ; Add custom Strip
 			if numCurrentDances<currentDances.length
 				; Open a Strip creation page, when closing set the strip as current dance
 				int i = currentStrips.length
@@ -441,26 +557,27 @@ debug.trace("DANCES option=" + option + " optsNum=" + opts.find(option))
 				ForcePageReset()
 			endIf
 		
-		elseIf option==opts[3] ; Change Selected
+		elseIf option==opts[5] ; Change Selected
 			if currentDances[currentSelectedDance] 
 				if currentDances[currentSelectedDance].isStrip
 					thePage="EditStrip"
+					spdfStrip s =  currentDances[currentSelectedDance] as spdfStrip
 					; get back the old strip values
-					currentDances[currentSelectedDance].getStrips(currentStrips)
-					animateStrip = currentDances[currentSelectedDance]._AnimatedStrips()
-					stripTime = currentDances[currentSelectedDance].duration
+					s.getStrips(currentStrips)
+					animateStrip = s.animatedStrip
+					stripTime = s.duration
 				else
 					thePage="EditDance"
 				endIf
 				ForcePageReset()
 			endIf
 			
-		elseIf option==opts[4] ; Remove Selected
+		elseIf option==opts[6] ; Remove Selected
 			; Ask for confirmation and then remove it, move back all next items
 			if currentDances[currentSelectedDance]
 				if currentDances[currentSelectedDance].isStrip
 					if ShowMessage("Are you sure to remove the Strip " + currentDances[currentSelectedDance].name + "?", true, "Yes", "No")
-						currentDances[currentSelectedDance]._releaseStrip()
+						(currentDances[currentSelectedDance] as spdfStrip)._releaseStrip()
 						int i = currentSelectedDance
 						while i<currentDances.length - 1
 							currentDances[i] = currentDances[i + 1]
@@ -488,29 +605,31 @@ debug.trace("DANCES option=" + option + " optsNum=" + opts.find(option))
 				endIf
 			endIf
 			
-		elseIf option==opts[5] ; Move Up
+		elseIf option==opts[7] ; Move Up
 			if currentSelectedDance>0
-				spdfDance tmp = currentDances[currentSelectedDance - 1]
+				spdfBase tmp = currentDances[currentSelectedDance - 1]
 				currentDances[currentSelectedDance - 1] = currentDances[currentSelectedDance]
 				currentDances[currentSelectedDance] = tmp
 				float ct = customTime[currentSelectedDance - 1]
 				customTime[currentSelectedDance - 1] = customTime[currentSelectedDance]
 				customTime[currentSelectedDance] = ct
+				currentSelectedDance-=1
 				ForcePageReset()
 			endIf
 			
-		elseIf option==opts[6] ; Move Down
+		elseIf option==opts[8] ; Move Down
 			if currentSelectedDance<numCurrentDances - 1
-				spdfDance tmp = currentDances[currentSelectedDance]
+				spdfBase tmp = currentDances[currentSelectedDance]
 				currentDances[currentSelectedDance] = currentDances[currentSelectedDance + 1]
 				currentDances[currentSelectedDance + 1] = tmp
 				float ct = customTime[currentSelectedDance]
 				customTime[currentSelectedDance] = customTime[currentSelectedDance + 1]
 				customTime[currentSelectedDance + 1] = ct
+				currentSelectedDance+=1
 				ForcePageReset()
 			endIf
 			
-		elseIf option==opts[7] ; Move Down
+		elseIf option==opts[9] ; Move Down
 			if -1<currentSelectedDance && currentSelectedDance<numCurrentDances
 				thePage="PreviewDance"
 				ForcePageReset()
@@ -534,6 +653,18 @@ debug.trace("EDITDANCE option=" + option + " optsNum=" + opts.find(option))
 			ForcePageReset()
 		endIf
 		
+	elseIf thePage=="PickingStrip"
+		if option==opts[0]
+			thePage = ""
+			ForcePageReset()
+		endIf
+	
+	elseIf thePage=="PickingPose"
+		if option==opts[0]
+			thePage = ""
+			ForcePageReset()
+		endIf
+	
 	elseIf thePage=="EditStrip"
 debug.trace("EDITSTRIP option=" + option + " optsNum=" + opts.find(option))
 		if option==opts[40] ; Save
@@ -646,6 +777,41 @@ state PickPoseMN
 			bool update = (pickedPose != index)
 			pickedPose = index
 			SetMenuOptionValueST(poseNames[pickedPose])
+			currentDances[currentSelectedPose] = reg._getPoseByIndex(posesIdx[pickedPose])
+			customTime[currentSelectedPose] = 0.0
+			if update
+				ForcePageReset()
+			endIf
+		endIf
+	endEvent
+
+	event OnDefaultST()
+		bool update = (pickedPose != 0)
+		pickedPose = 0
+		SetMenuOptionValueST(poseNames[0])
+		currentDances[currentSelectedPose] = reg._getPoseByIndex(posesIdx[0])
+		if update
+			ForcePageReset()
+		endIf
+	endEvent
+
+	event OnHighlightST()
+		SetInfoText("Select the pose from the available ones.")
+	endEvent
+endState
+
+state PickPoseMNold
+	event OnMenuOpenST()
+		SetMenuDialogStartIndex(pickedPose)
+		SetMenuDialogDefaultIndex(0)
+		SetMenuDialogOptions(poseNames)
+	endEvent
+
+	event OnMenuAcceptST(int index)
+		if index>-1 && index<poseNames.length
+			bool update = (pickedPose != index)
+			pickedPose = index
+			SetMenuOptionValueST(poseNames[pickedPose])
 			if update
 				ForcePageReset()
 			endIf
@@ -706,7 +872,7 @@ state DanceTimeSL
 	Event OnSliderOpenST()
 		SetSliderDialogStartValue(customTime[currentSelectedDance])
 		SetSliderDialogDefaultValue(currentDances[currentSelectedDance].duration)
-		SetSliderDialogRange(0.0, 240.0)
+		SetSliderDialogRange(0.0, 30.0)
 		SetSliderDialogInterval(0.05)
 	endEvent
 
@@ -795,10 +961,18 @@ string function trimFloat(float f)
 		return "0.00"
 	endIf
 	
+	bool neg = f<0.0
+	if neg
+		f = -f
+	endIf
+	
 	int v = (f * 100) as int
 	string r = ""+(v / 100) as int
 	r += "." + ((v % 100) / 10) as int
 	r += (v % 10) as int
+	if neg
+		return "-" + r
+	endIf
 	return r
 endFunction
 
@@ -817,6 +991,7 @@ function playDance(Actor a)
 	
 		spdfPerformance p = spdF.newPerformance(a, placedPole, performanceTime)
 		p.setDancesObject(currentDances)
+		p.setTimersArray(customTime)
 		p.start()
 	elseIf currPerfMode==1
 		if pickedPose<0
@@ -834,4 +1009,118 @@ function playDance(Actor a)
 	endIf
 endFunction
 
+
+
+
+
+
+; FIXME DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG 
+
+float dd = -100.0
+float za = 12.26
+float tt = 0.5
+float incr=0.5
+ObjectReference marker = none
+ObjectReference pole = none
+
+Event onKeyUp(Int KeyCode, Float HoldTime)
+	if keyCode==2
+		dd+=incr
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==3
+		dd-=incr
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==4
+		za+=incr
+		if za>360.0
+			za-=360.0
+		endIf
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==5
+		za-=incr
+		if za<0.0
+			za+=360.0
+		endIf
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==6
+		tt+=incr
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==7
+		tt-=incr
+		debug.trace("DD=" + trimFloat(dd) + " A="+trimFloat(za) + " t="+trimFloat(tt))
+		placeM()
+	elseIf keyCode==8
+		incr*=2.0
+		debug.trace("incr=" + incr)
+	elseIf keyCode==9
+		incr/=2.0
+		debug.trace("incr=" + incr)
+		
+	elseIf keyCode==10 ; test
+		doTest(saadiaClone)
+;		doTest(Game.getPlayer())
+	elseIf keyCode==11 ; test
+		doTest(saadiaClone)
+	endIf
+endEvent
+
+Actor Property saadiaClone Auto
+
+Function doTest(Actor p)
+		placeM()
+		float prepx=p.x
+		float prepy=p.y
+		float prepz=p.getAngleZ()
+		if p==game.getplayer()
+			Game.SetPlayerAIDriven(true)
+			Game.forceThirdPerson()
+		endIf
+		p.setPosition(marker.x, marker.y, marker.z)
+		p.setAngle(0,0,marker.getAngleZ())
+		Utility.waitMenuMode(1.0)
+		debug.sendAnimationEvent(p, "spdfPose1_Start")
+		p.setPosition(pole.X, pole.Y, pole.Z)
+		p.setAngle(0.0, 0.0, pole.GetAngleZ())
+		p.SetVehicle(pole)
+		Utility.waitMenuMode(4.0)
+		debug.sendAnimationEvent(p, "spdfPose1_End")
+		Utility.waitMenuMode(5.0)
+		p.setPosition(marker.X, marker.Y, marker.Z)
+		p.setAngle(0.0, 0.0, marker.GetAngleZ())
+		p.SetVehicle(marker)
+		p.StopTranslation()
+		debug.sendAnimationEvent(p, "IdleForceDefaultState")
+		if p==game.getplayer()
+			Game.SetPlayerAIDriven(false)
+		endIf
+		Utility.waitMenuMode(0.1)
+		p.SetVehicle(None)
+endFunction
+
+
+Function placeM()
+	Actor p = saadiaClone ;game.getPlayer()
+	if !pole
+		pole = spdF.placePole(p, 190, 0)
+		p.unequipall()
+		saadiaClone.unequipall()
+	endIf
+	if !marker
+		marker = p.placeAtMe(spdF.spdfMarker, 1, false, false)
+	endIf
+	float newAngle = pole.GetAngleZ() + za
+	if newAngle<0.0
+		newAngle+=360.0
+	endIf
+	if newAngle>360.0
+		newAngle-=360.0
+	endIf
+	marker.moveTo(pole, Math.sin(newAngle) * dd, Math.cos(newAngle) * dd, 0.0, true)
+	marker.setAngle(0.0, 0.0, pole.getAngleZ())
+endFunction
 
